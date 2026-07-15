@@ -6,7 +6,7 @@ use std::{
 use typed_index_collections::TiVec;
 
 use crate::domain::{
-    Capacity, Coordinate, CustomerId, Event, EventType, Location, ProblemInstance,
+    Capacity, Coordinate, CustomerId, Event, EventKind, Location, ProblemInstance,
 };
 
 pub(crate) fn parse(path: &str) -> Result<ProblemInstance, Error> {
@@ -76,7 +76,7 @@ pub(crate) fn parse(path: &str) -> Result<ProblemInstance, Error> {
                 customer_id,
                 requested_capacity,
                 location: Location { x, y },
-                event_type: EventType::Delivery,
+                kind: EventKind::Delivery,
             })
         })
         .collect::<Result<TiVec<CustomerId, Event>, Error>>()?;
@@ -90,6 +90,7 @@ pub(crate) fn parse(path: &str) -> Result<ProblemInstance, Error> {
 }
 
 #[derive(Debug)]
+#[expect(dead_code, reason = "The error message is for printing to the user")]
 pub(crate) enum Error {
     Io(std::io::Error),
     UnexpectedFileFormat(&'static str),

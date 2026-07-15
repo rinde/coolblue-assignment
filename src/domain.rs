@@ -49,11 +49,11 @@ pub(crate) struct Event {
     pub(crate) customer_id: CustomerId,
     pub(crate) requested_capacity: Capacity,
     pub(crate) location: Location,
-    pub(crate) event_type: EventType,
+    pub(crate) kind: EventKind,
 }
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub(crate) enum EventType {
+pub(crate) enum EventKind {
     Pickup,
     Delivery,
 }

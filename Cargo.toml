@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# clap = "4.6.1"
+clap = { version = "4.6.2", features = ["derive"] }
 derive_more = { version = "2.1.1", features = ["from", "into", "add", "add_assign"] }
 typed-index-collections = "3.5.0"
-itertools = "0.15.0"
+humantime = "2.4.0"
 rand = "0.10.2"
 rand_xoshiro = "0.8.1"
 
@@ -61,10 +61,13 @@ cast_possible_wrap = "allow"
 cast_sign_loss = "allow"
 
 ### Restrictions
-panic = "warn"
+#panic = "warn"
 unwrap_used = "warn"
 expect_used = "warn"
 unimplemented = "warn"
 exit = "warn"
 unreachable = "warn"
 string_slice = "warn"
+
+[profile.release]
+lto = true

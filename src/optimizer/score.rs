@@ -19,7 +19,7 @@ impl MediumSoft {
         soft_penalty: Distance(0.0),
     };
 
-    pub(crate) fn new(medium_score: usize, soft_penalty: Distance) -> Self {
+    pub(crate) const fn new(medium_score: usize, soft_penalty: Distance) -> Self {
         Self {
             medium_score,
             soft_penalty,

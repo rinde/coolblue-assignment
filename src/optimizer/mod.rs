@@ -24,16 +24,18 @@ const MOVES: [MoveType; 4] = [
 pub(crate) struct OptimizationParams {
     pub(crate) move_limit: usize,
     pub(crate) seed: u64,
+    pub(crate) incremental_score_calculation: bool,
 }
 
 // hard score: all capacity constraints need to be met
 // medium score: more deliveries is better
 // soft score: minimize route distance
 
+/// Optimize the problem with simulated annealing.
 pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -> Solution {
     let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(params.seed);
 
-    let mut opt_state = OptState::init(problem, true);
+    let mut opt_state = OptState::init(problem, params.incremental_score_calculation);
 
     let mut best_route = opt_state.route.clone();
     let mut best_score = MediumSoft::ZERO;
@@ -41,15 +43,13 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
 
     // https://en.wikipedia.org/wiki/Simulated_annealing
     for k in 0..params.move_limit {
+        #[expect(clippy::unwrap_used, reason = "MOVES is not empty so this cannot fail")]
         let move_ = MOVES
             .choose(&mut rng)
             .unwrap()
             .apply(&mut opt_state, &mut rng);
 
         if let Some(move_) = move_ {
-            // println!("{:?}", move_);
-            // println!("{:?}", opt_state.route);
-            // println!("pickup index {}", opt_state.pickup_index);
             let diff = move_.diff();
 
             let res = opt_state.update_score(diff, problem);
@@ -60,7 +60,6 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
             // .. accept move with probability decreasing over time
             || rng.random_bool(1.0 - ((k + 1) as f64 / params.move_limit as f64)))
             {
-                // println!(" > accept");
                 // accept move
                 current_score = med_soft;
                 if med_soft > best_score {
@@ -69,11 +68,8 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
                     best_route.clone_from(&opt_state.route);
                 }
             } else {
-                // println!(" > reject");
                 // reject move
                 let diff = move_.undo(&mut opt_state);
-                // println!("{:?}", opt_state.route);
-                // println!("pickup index {}", opt_state.pickup_index);
                 let undo_res = opt_state.update_score(diff, problem);
                 assert_ne!(undo_res, ScoreResult::CapacityViolation);
             }
@@ -81,13 +77,16 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
     }
 
     Solution {
+        name: problem.name.clone(),
         route: best_route,
         score: best_score,
     }
 }
 
 #[derive(Debug)]
+#[expect(dead_code, reason = "The struct is printed in the CLI")]
 pub(crate) struct Solution {
+    pub(crate) name: String,
     pub(crate) route: Vec<CustomerId>,
     pub(crate) score: MediumSoft,
 }
@@ -272,14 +271,4 @@ impl Move {
             Move::SwapInRoute { index1, index2 } => Diff::new(index1.min(index2), None, None),
         }
     }
-}
-
-// moves
-// add delivery
-// swap delivery (add 1, remove 1)
-// swap pickup (add 1, remove 1)
-// swap order (p/d)
-
-mod test {
-    use super::*;
 }
