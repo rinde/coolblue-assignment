@@ -33,7 +33,7 @@ impl From<CustomerId> for usize {
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct Coordinate(pub u16);
 
-#[derive(Debug, Clone, Copy, Default, Add, PartialOrd, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, Add, AddAssign, PartialOrd, PartialEq)]
 pub(crate) struct Distance(pub f64);
 
 #[derive(Debug, Clone)]

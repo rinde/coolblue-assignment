@@ -33,7 +33,7 @@ pub(crate) struct OptimizationParams {
 pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -> Solution {
     let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(params.seed);
 
-    let mut opt_state = OptState::init(problem);
+    let mut opt_state = OptState::init(problem, true);
 
     let mut best_route = opt_state.route.clone();
     let mut best_score = MediumSoft::ZERO;
@@ -47,9 +47,9 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
             .apply(&mut opt_state, &mut rng);
 
         if let Some(move_) = move_ {
-            println!("{:?}", move_);
-            println!("{:?}", opt_state.route);
-            println!("pickup index {}", opt_state.pickup_index);
+            // println!("{:?}", move_);
+            // println!("{:?}", opt_state.route);
+            // println!("pickup index {}", opt_state.pickup_index);
             let diff = move_.diff();
 
             let res = opt_state.update_score(diff, problem);
@@ -60,7 +60,7 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
             // .. accept move with probability decreasing over time
             || rng.random_bool(1.0 - ((k + 1) as f64 / params.move_limit as f64)))
             {
-                println!(" > accept");
+                // println!(" > accept");
                 // accept move
                 current_score = med_soft;
                 if med_soft > best_score {
@@ -69,11 +69,11 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
                     best_route.clone_from(&opt_state.route);
                 }
             } else {
-                println!(" > reject");
+                // println!(" > reject");
                 // reject move
                 let diff = move_.undo(&mut opt_state);
-                println!("{:?}", opt_state.route);
-                println!("pickup index {}", opt_state.pickup_index);
+                // println!("{:?}", opt_state.route);
+                // println!("pickup index {}", opt_state.pickup_index);
                 let undo_res = opt_state.update_score(diff, problem);
                 assert_ne!(undo_res, ScoreResult::CapacityViolation);
             }

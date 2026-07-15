@@ -10,7 +10,16 @@ pub(super) struct OptState {
     pub(super) unrouted_deliveries: Vec<CustomerId>,
     pub(super) pickup_index: usize,
 
-    // derived stats
+    score: ScoreState,
+}
+
+enum ScoreState {
+    AtOnce,
+    Incremental(IncrementalScoreState),
+}
+
+#[derive(Default)]
+struct IncrementalScoreState {
     free_capacity_at_start: Capacity,
     location_at: Vec<Location>,
     distance_at: Vec<Distance>,
@@ -19,8 +28,92 @@ pub(super) struct OptState {
     earliest_pickup_index: usize,
 }
 
+impl IncrementalScoreState {
+    pub(super) fn update_score(
+        &mut self,
+        route: &[CustomerId],
+        pickup_index: usize,
+        diff: Diff,
+        problem: &ProblemInstance,
+    ) -> ScoreResult {
+        #[cfg(debug_assertions)]
+        let score = calculate_score(route, problem);
+
+        if let Some(event) = diff.remove.map(|c| &problem.events[c])
+            && event.event_type == EventType::Delivery
+        {
+            self.free_capacity_at_start += event.requested_capacity;
+        }
+        if let Some(event) = diff.add.map(|c| &problem.events[c])
+            && event.event_type == EventType::Delivery
+        {
+            self.free_capacity_at_start -= event.requested_capacity;
+        }
+
+        if self.free_capacity_at_start < Capacity::ZERO {
+            #[cfg(debug_assertions)]
+            debug_assert_eq!(score, ScoreResult::CapacityViolation);
+            return ScoreResult::CapacityViolation;
+        }
+
+        let mut current_capacity = self.free_capacity_at_start;
+        let pickup = &problem.events[route[pickup_index]];
+        debug_assert_eq!(pickup.event_type, EventType::Pickup);
+        let mut earliest_pickup_index = route.len();
+        for (i, c) in route.iter().copied().enumerate() {
+            if current_capacity >= pickup.requested_capacity {
+                earliest_pickup_index = i;
+                break;
+            }
+            if i != pickup_index {
+                current_capacity += problem.events[c].requested_capacity;
+            }
+        }
+
+        // pickup happens before enough capacity is freed
+        if pickup_index < earliest_pickup_index {
+            #[cfg(debug_assertions)]
+            debug_assert_eq!(score, ScoreResult::CapacityViolation);
+            return ScoreResult::CapacityViolation;
+        }
+        self.earliest_pickup_index = earliest_pickup_index;
+
+        // calculate distances
+        let route_len = route.len();
+        self.distance_at.resize(route_len, Distance(0.0));
+        self.location_at.resize(route_len, Location::DEPOT);
+
+        for i in diff.index..route_len {
+            self.location_at[i] = problem.events[route[i]].location;
+        }
+
+        let (mut prev_loc, mut prev_dist) = if diff.index == 0 {
+            (Location::DEPOT, Distance(0.0))
+        } else {
+            (
+                self.location_at[diff.index - 1],
+                self.distance_at[diff.index - 1],
+            )
+        };
+
+        for i in diff.index..route_len {
+            self.distance_at[i] = prev_dist + self.location_at[i].distance(prev_loc);
+            prev_loc = self.location_at[i];
+            prev_dist = self.distance_at[i];
+        }
+        self.distance_at_end = *self.distance_at.last().unwrap()
+            + self.location_at.last().unwrap().distance(Location::DEPOT);
+
+        let incremental_score =
+            ScoreResult::NoCapacityViolation(MediumSoft::new(route.len(), self.distance_at_end));
+        #[cfg(debug_assertions)]
+        debug_assert_eq!(incremental_score, score);
+        incremental_score
+    }
+}
+
 impl OptState {
-    pub(super) fn init(problem: &ProblemInstance) -> Self {
+    pub(super) fn init(problem: &ProblemInstance, incremental: bool) -> Self {
         let mut unrouted_pickups = problem
             .events
             .iter()
@@ -46,11 +139,14 @@ impl OptState {
             unrouted_pickups,
             unrouted_deliveries,
             pickup_index: 0,
-            free_capacity_at_start: problem.vehicle_capacity,
-            location_at: vec![],
-            distance_at: vec![],
-            distance_at_end: Distance(0.0),
-            earliest_pickup_index: 0,
+            score: if incremental {
+                ScoreState::Incremental(IncrementalScoreState {
+                    free_capacity_at_start: problem.vehicle_capacity,
+                    ..Default::default()
+                })
+            } else {
+                ScoreState::AtOnce
+            },
         };
         let result = state.update_score(Diff::new(0, Some(state.route[0]), None), problem);
         debug_assert_ne!(result, ScoreResult::CapacityViolation);
@@ -58,69 +154,50 @@ impl OptState {
     }
 
     pub(super) fn update_score(&mut self, diff: Diff, problem: &ProblemInstance) -> ScoreResult {
-        if let Some(event) = diff.remove.map(|c| &problem.events[c])
-            && event.event_type == EventType::Delivery
-        {
-            self.free_capacity_at_start += event.requested_capacity;
-        }
-        if let Some(event) = diff.add.map(|c| &problem.events[c])
-            && event.event_type == EventType::Delivery
-        {
-            self.free_capacity_at_start -= event.requested_capacity;
-        }
-
-        if self.free_capacity_at_start < Capacity::ZERO {
-            return ScoreResult::CapacityViolation;
-        }
-
-        let mut current_capacity = self.free_capacity_at_start;
-        let pickup = &problem.events[self.route[self.pickup_index]];
-        debug_assert_eq!(pickup.event_type, EventType::Pickup);
-        let mut earliest_pickup_index = self.route.len();
-        for (i, c) in self.route.iter().copied().enumerate() {
-            if current_capacity >= pickup.requested_capacity {
-                earliest_pickup_index = i;
-                break;
-            }
-            if i != self.pickup_index {
-                current_capacity += problem.events[c].requested_capacity;
+        match &mut self.score {
+            ScoreState::AtOnce => calculate_score(&self.route, problem),
+            ScoreState::Incremental(score) => {
+                score.update_score(&self.route, self.pickup_index, diff, problem)
             }
         }
-
-        // pickup happens before enough capacity is freed
-        if self.pickup_index < earliest_pickup_index {
-            return ScoreResult::CapacityViolation;
-        }
-        self.earliest_pickup_index = earliest_pickup_index;
-
-        // calculate distances
-        let route_len = self.route.len();
-        self.distance_at.resize(route_len, Distance(0.0));
-        self.location_at.resize(route_len, Location::DEPOT);
-
-        for i in diff.index..route_len {
-            self.location_at[i] = problem.events[self.route[i]].location;
-        }
-
-        let (mut prev_loc, mut prev_dist) = if diff.index == 0 {
-            (Location::DEPOT, Distance(0.0))
-        } else {
-            (
-                self.location_at[diff.index - 1],
-                self.distance_at[diff.index - 1],
-            )
-        };
-
-        for i in diff.index..route_len {
-            self.distance_at[i] = prev_dist + self.location_at[i].distance(prev_loc);
-            prev_loc = self.location_at[i];
-            prev_dist = self.distance_at[i];
-        }
-        self.distance_at_end = *self.distance_at.last().unwrap()
-            + self.location_at.last().unwrap().distance(Location::DEPOT);
-
-        ScoreResult::NoCapacityViolation(MediumSoft::new(self.route.len(), self.distance_at_end))
     }
+}
+
+fn calculate_score(route: &[CustomerId], problem: &ProblemInstance) -> ScoreResult {
+    let mut free_capacity = problem.vehicle_capacity;
+    // calculate initial free capacity
+    for &customer in route {
+        let event = problem.events[customer];
+        match event.event_type {
+            EventType::Pickup => {}
+            EventType::Delivery => {
+                free_capacity -= event.requested_capacity;
+                if free_capacity < Capacity::ZERO {
+                    return ScoreResult::CapacityViolation;
+                }
+            }
+        }
+    }
+
+    let mut distance_traveled = Distance(0.0);
+    let mut prev_loc = Location::DEPOT;
+    for &customer in route {
+        let event = problem.events[customer];
+        match event.event_type {
+            EventType::Pickup => {
+                free_capacity -= event.requested_capacity;
+                if free_capacity < Capacity::ZERO {
+                    return ScoreResult::CapacityViolation;
+                }
+            }
+            EventType::Delivery => free_capacity += event.requested_capacity,
+        }
+        distance_traveled += prev_loc.distance(event.location);
+        prev_loc = event.location;
+    }
+    distance_traveled += prev_loc.distance(Location::DEPOT);
+
+    ScoreResult::NoCapacityViolation(MediumSoft::new(route.len(), distance_traveled))
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -143,7 +220,7 @@ mod test {
     use crate::domain::{Coordinate, Event, ProblemInstance};
 
     #[test]
-    fn test_opt_state() {
+    fn test_incremental_opt_state() {
         let problem = ProblemInstance {
             name: String::new(),
             _num_vehicles: 0,
@@ -170,7 +247,7 @@ mod test {
             ],
         };
 
-        let mut state = OptState::init(&problem);
+        let mut state = OptState::init(&problem, true);
 
         // add a delivery to the route
         state.route.push(state.unrouted_deliveries.remove(0));
@@ -184,10 +261,14 @@ mod test {
         assert_eq!(state.route.len(), 2);
         assert_eq!(state.unrouted_pickups.len(), 0);
         assert_eq!(state.unrouted_deliveries.len(), 1);
-        assert_eq!(state.free_capacity_at_start, Capacity(160));
-        assert_eq!(state.earliest_pickup_index, 0);
-        assert_eq!(state.distance_at, vec![Distance(20.0), Distance(30.0)]);
-        assert_eq!(state.distance_at_end, Distance(40.0));
+
+        let ScoreState::Incremental(incr) = &state.score else {
+            panic!();
+        };
+        assert_eq!(incr.free_capacity_at_start, Capacity(160));
+        assert_eq!(incr.earliest_pickup_index, 0);
+        assert_eq!(incr.distance_at, vec![Distance(20.0), Distance(30.0)]);
+        assert_eq!(incr.distance_at_end, Distance(40.0));
 
         // add another delivery to the front of the route
         state
@@ -199,6 +280,9 @@ mod test {
             vec![CustomerId(2), CustomerId(1), CustomerId(0)]
         );
         let score = state.update_score(Diff::new(0, Some(CustomerId(2)), None), &problem);
+        let ScoreState::Incremental(incr) = &state.score else {
+            panic!();
+        };
         assert_ne!(score, ScoreResult::CapacityViolation);
         if let ScoreResult::NoCapacityViolation(x) = score {
             assert_eq!(x, MediumSoft::new(3, Distance(60.0)));
@@ -206,13 +290,13 @@ mod test {
         assert_eq!(state.route.len(), 3);
         assert_eq!(state.unrouted_pickups.len(), 0);
         assert_eq!(state.unrouted_deliveries.len(), 0);
-        assert_eq!(state.free_capacity_at_start, Capacity(0));
-        assert_eq!(state.earliest_pickup_index, 1);
+        assert_eq!(incr.free_capacity_at_start, Capacity(0));
+        assert_eq!(incr.earliest_pickup_index, 1);
         assert_eq!(
-            state.distance_at,
+            incr.distance_at,
             vec![Distance(30.0), Distance(40.0), Distance(50.0)]
         );
-        assert_eq!(state.distance_at_end, Distance(60.0));
+        assert_eq!(incr.distance_at_end, Distance(60.0));
     }
 
     fn loc(x: u16, y: u16) -> Location {

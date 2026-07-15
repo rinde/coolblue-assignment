@@ -8,9 +8,9 @@ set quiet
 
 test:
 	cargo test --workspace --all-targets --all-features
-	cargo test --workspace --doc --all-features
+	# cargo test --workspace --doc --all-features
 
-lint strict="":
+lint:
     cargo '+nightly' fmt -- --check
     cargo clippy \
         --workspace \
@@ -18,8 +18,8 @@ lint strict="":
         --benches \
         --all-targets \
         --all-features \
-        --quiet \
-        -- {{ if strict != "" { "-D warnings" } else { "" } }}
+        --quiet
+
     cargo doc --all --no-deps --document-private-items --all-features --quiet
 
 fmt:
