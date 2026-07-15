@@ -12,7 +12,7 @@ fn main() {
     let solution = optimizer::optimize(
         &problem,
         &OptimizationParams {
-            move_limit: 100_000,
+            move_limit: 1_000_000,
             seed: 7,
         },
     );
