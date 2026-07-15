@@ -1,0 +1,70 @@
+[package]
+name = "coolblue"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# clap = "4.6.1"
+derive_more = { version = "2.1.1", features = ["from", "into", "add", "add_assign"] }
+typed-index-collections = "3.5.0"
+itertools = "0.15.0"
+rand = "0.10.2"
+rand_xoshiro = "0.8.1"
+
+[lints.rust]
+macro_use_extern_crate = "warn"
+meta_variable_misuse = "warn"
+missing_copy_implementations = "warn"
+missing_debug_implementations = "warn"
+missing_docs = "allow" # TODO
+single_use_lifetimes = "warn"
+unreachable_pub = "warn"
+unsafe_code = "forbid"
+unstable_features = "forbid"
+unused_crate_dependencies = "warn"
+unused_extern_crates = "warn"
+unused_import_braces = "warn"
+unused_lifetimes = "warn"
+unused_macro_rules = "warn"
+unused_qualifications = "warn"
+unused_results = "warn"
+dead_code = "warn"
+unused = { level = "warn", priority = -1 }
+
+[lints.rustdoc]
+broken_intra_doc_links = "deny"
+missing_crate_level_docs = "warn"
+
+[lints.clippy]
+complexity = { level = "warn", priority = -1 }
+correctness = { level = "deny", priority = -1 }
+perf = { level = "warn", priority = -1 }
+style = { level = "warn", priority = -1 }
+suspicious = { level = "deny", priority = -1 }
+
+# cargo = { level = "allow", priority = -1 }
+todo = "warn"
+
+disallowed-types = "deny"
+missing_const_for_fn = "warn"
+
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+
+### Pedantic
+pedantic = { level = "warn", priority = -1 }
+missing_errors_doc = "allow" # TODO
+cast_precision_loss = "allow"
+cast_possible_truncation = "allow"
+cast_lossless = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+
+### Restrictions
+panic = "warn"
+unwrap_used = "warn"
+expect_used = "warn"
+unimplemented = "warn"
+exit = "warn"
+unreachable = "warn"
+string_slice = "warn"
