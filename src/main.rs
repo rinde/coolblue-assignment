@@ -7,12 +7,9 @@ use std::time::Instant;
 
 use clap::Parser;
 use humantime::format_duration;
-use rand::{SeedableRng, seq::SliceRandom};
+use rand::SeedableRng;
 
-use crate::{
-    domain::CustomerId,
-    optimizer::{AcceptanceP, OptimizationParams},
-};
+use crate::optimizer::{AcceptanceP, OptimizationParams};
 
 mod domain;
 mod optimizer;

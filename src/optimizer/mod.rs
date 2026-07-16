@@ -303,7 +303,7 @@ mod test {
     use typed_index_collections::ti_vec;
 
     use super::*;
-    use crate::domain::{Capacity, Coordinate, Event, EventKind, Location};
+    use crate::domain::{Capacity, Coordinate, Distance, Event, EventKind, Location};
 
     fn loc(x: u16, y: u16) -> Location {
         Location {
@@ -562,6 +562,92 @@ mod test {
             assert_eq!(opt_state.route, before_route);
             assert_eq!(opt_state.pickup_index, before_pickup_index);
             assert_eq!(undo_diff, Diff::new(index1.min(index2), None, None));
+        }
+    }
+
+    /// Builds a problem where the optimum is known by construction: one
+    /// pickup (c0) and five deliveries placed such that the shortest route
+    /// forms a rectangle that ends with the pickup because of the tight
+    /// capacity constraints.
+    ///
+    /// c2 -- c3 -- c4
+    /// |           |
+    /// c1          |
+    /// |           |
+    /// D --- c0 -- c5
+    ///
+    /// Optimal route: c1, c2, c3, c4, c5, c0
+    /// Optimal distance: 8
+    fn known_optimum_problem() -> ProblemInstance {
+        ProblemInstance {
+            name: "known-optimum".to_owned(),
+            _num_vehicles: 1,
+            vehicle_capacity: Capacity(50),
+            events: ti_vec![
+                Event {
+                    customer_id: CustomerId(0),
+                    requested_capacity: Capacity(10),
+                    location: loc(0, 1),
+                    kind: EventKind::Pickup,
+                },
+                Event {
+                    customer_id: CustomerId(1),
+                    requested_capacity: Capacity(10),
+                    location: loc(1, 0),
+                    kind: EventKind::Delivery,
+                },
+                Event {
+                    customer_id: CustomerId(2),
+                    requested_capacity: Capacity(10),
+                    location: loc(2, 0),
+                    kind: EventKind::Delivery,
+                },
+                Event {
+                    customer_id: CustomerId(3),
+                    requested_capacity: Capacity(10),
+                    location: loc(2, 1),
+                    kind: EventKind::Delivery,
+                },
+                Event {
+                    customer_id: CustomerId(4),
+                    requested_capacity: Capacity(10),
+                    location: loc(2, 2),
+                    kind: EventKind::Delivery,
+                },
+                Event {
+                    customer_id: CustomerId(5),
+                    requested_capacity: Capacity(10),
+                    location: loc(0, 2),
+                    kind: EventKind::Delivery,
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn optimize_finds_known_optimum() {
+        let problem = known_optimum_problem();
+        let params = OptimizationParams {
+            move_limit: 5_000,
+            incremental_score_calculation: true,
+            acceptance_fun: AcceptanceP::DeltaLogDecreasing,
+        };
+
+        for seed in 0..10 {
+            let mut rng = rng(seed);
+            let solution = optimize(&problem, &params, &mut rng);
+
+            assert_eq!(
+                solution.score,
+                MediumSoft::new(problem.events.len(), Distance(8.0)),
+            );
+            assert_eq!(
+                solution.route,
+                [1, 2, 3, 4, 5, 0]
+                    .into_iter()
+                    .map(CustomerId)
+                    .collect::<Vec<_>>()
+            );
         }
     }
 }
