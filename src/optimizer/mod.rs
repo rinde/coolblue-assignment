@@ -5,7 +5,6 @@ use std::mem;
 
 use rand::Rng;
 use rand::RngExt;
-use rand::SeedableRng;
 use rand::seq::IndexedRandom;
 
 use crate::domain::{CustomerId, ProblemInstance};
@@ -23,7 +22,6 @@ const MOVES: [MoveType; 4] = [
 
 pub(crate) struct OptimizationParams {
     pub(crate) move_limit: usize,
-    pub(crate) seed: u64,
     pub(crate) incremental_score_calculation: bool,
     pub(crate) acceptance_fun: AcceptanceP,
 }
@@ -33,9 +31,11 @@ pub(crate) struct OptimizationParams {
 // soft score: minimize route distance
 
 /// Optimize the problem with simulated annealing.
-pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -> Solution {
-    let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(params.seed);
-
+pub(crate) fn optimize(
+    problem: &ProblemInstance,
+    params: &OptimizationParams,
+    rng: &mut impl Rng,
+) -> Solution {
     let mut opt_state = OptState::init(problem, params.incremental_score_calculation);
 
     let mut best_route = opt_state.route.clone();
@@ -45,10 +45,7 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
     // https://en.wikipedia.org/wiki/Simulated_annealing
     for k in 0..params.move_limit {
         #[expect(clippy::unwrap_used, reason = "MOVES is not empty so this cannot fail")]
-        let move_ = MOVES
-            .choose(&mut rng)
-            .unwrap()
-            .apply(&mut opt_state, &mut rng);
+        let move_ = MOVES.choose(rng).unwrap().apply(&mut opt_state, rng);
 
         if let Some(move_) = move_ {
             let diff = move_.diff();

@@ -7,6 +7,7 @@ use std::time::Instant;
 
 use clap::Parser;
 use humantime::format_duration;
+use rand::{SeedableRng, seq::SliceRandom};
 
 use crate::{
     domain::CustomerId,
@@ -38,6 +39,13 @@ struct Cli {
 
     #[arg(long, value_enum, default_value_t = AcceptanceP::DeltaLogDecreasing)]
     acceptance_fun: AcceptanceP,
+
+    /// The number of events n in the input that should be considered as pickup
+    /// events. The selected events are in 0..n range. Values outside of the
+    /// [0.0, 0.9] range will be ignored and it is guaranteed that there will
+    /// always be at least one pickup.
+    #[arg(long, default_value_t = 0.02)]
+    pickup_proportion: f64,
 }
 
 fn main() {
@@ -48,17 +56,24 @@ fn main() {
         parser::parse(&cli.file).unwrap_or_else(|err| panic!("Parsing failed {err:?}"));
     let parse_duration = start.elapsed();
 
-    problem.events[CustomerId(0)].kind = domain::EventKind::Pickup;
+    let mut rng = rand_xoshiro::Xoroshiro128PlusPlus::seed_from_u64(cli.seed);
+
+    // turn events into pickups
+    let num_pickups =
+        1.max((problem.events.len() as f64 * cli.pickup_proportion.min(0.9)) as usize);
+    for event in problem.events.iter_mut().take(num_pickups) {
+        event.kind = domain::EventKind::Pickup;
+    }
 
     let start = Instant::now();
     let solution = optimizer::optimize(
         &problem,
         &OptimizationParams {
             move_limit: cli.move_limit,
-            seed: cli.seed,
             incremental_score_calculation: !cli.disable_incremental_score,
             acceptance_fun: cli.acceptance_fun,
         },
+        &mut rng,
     );
     let solve_duration = start.elapsed();
     println!(
