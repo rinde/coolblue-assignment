@@ -200,7 +200,7 @@ fn calculate_score(route: &[CustomerId], problem: &ProblemInstance) -> ScoreResu
     ScoreResult::NoCapacityViolation(MediumSoft::new(route.len(), distance_traveled))
 }
 
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub(super) struct Diff {
     index: usize,
     add: Option<CustomerId>,
