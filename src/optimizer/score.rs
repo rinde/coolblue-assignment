@@ -25,6 +25,21 @@ impl MediumSoft {
             soft_penalty,
         }
     }
+
+    /// Calculates the 'delta' between two scores.
+    ///
+    /// If the medium score differs, it will return the absolute difference
+    /// between the scores `> 1.0`. If the medium score is equal it will return
+    /// a percentage of difference of the soft penalty in `0.0-1.0` range.
+    pub(crate) fn delta(self, other: Self) -> f64 {
+        if self.medium_score != other.medium_score {
+            self.medium_score.abs_diff(other.medium_score) as f64
+        } else if other.soft_penalty < self.soft_penalty {
+            1.0 - other.soft_penalty.0 / self.soft_penalty.0
+        } else {
+            1.0 - self.soft_penalty.0 / other.soft_penalty.0
+        }
+    }
 }
 
 impl PartialOrd for MediumSoft {

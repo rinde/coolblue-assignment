@@ -8,7 +8,10 @@ use std::time::Instant;
 use clap::Parser;
 use humantime::format_duration;
 
-use crate::{domain::CustomerId, optimizer::OptimizationParams};
+use crate::{
+    domain::CustomerId,
+    optimizer::{AcceptanceP, OptimizationParams},
+};
 
 mod domain;
 mod optimizer;
@@ -32,6 +35,9 @@ struct Cli {
 
     #[arg(long, default_value_t = false)]
     disable_incremental_score: bool,
+
+    #[arg(long, value_enum, default_value_t = AcceptanceP::DeltaLogDecreasing)]
+    acceptance_fun: AcceptanceP,
 }
 
 fn main() {
@@ -51,6 +57,7 @@ fn main() {
             move_limit: cli.move_limit,
             seed: cli.seed,
             incremental_score_calculation: !cli.disable_incremental_score,
+            acceptance_fun: cli.acceptance_fun,
         },
     );
     let solve_duration = start.elapsed();

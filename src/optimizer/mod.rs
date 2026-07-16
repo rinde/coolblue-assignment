@@ -25,6 +25,7 @@ pub(crate) struct OptimizationParams {
     pub(crate) move_limit: usize,
     pub(crate) seed: u64,
     pub(crate) incremental_score_calculation: bool,
+    pub(crate) acceptance_fun: AcceptanceP,
 }
 
 // hard score: all capacity constraints need to be met
@@ -57,9 +58,12 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
             if let ScoreResult::NoCapacityViolation(med_soft) = res
                 // solution is better, or..
                 && (med_soft >= current_score
-            // .. accept move with probability decreasing over time
-            || rng.random_bool(1.0 - ((k + 1) as f64 / params.move_limit as f64)))
-            {
+            // .. accept move with probability defined by acceptance_fun
+            || {
+                let delta = med_soft.delta(current_score);
+                let prob = params.acceptance_fun.probability(1.0 - ((k + 1) as f64 / params.move_limit as f64), delta);
+                rng.random_bool(prob)
+            }) {
                 // accept move
                 current_score = med_soft;
                 if med_soft > best_score {
@@ -80,6 +84,29 @@ pub(crate) fn optimize(problem: &ProblemInstance, params: &OptimizationParams) -
         name: problem.name.clone(),
         route: best_route,
         score: best_score,
+    }
+}
+
+#[derive(Copy, Clone, Debug, clap::ValueEnum)]
+pub(crate) enum AcceptanceP {
+    /// Decreases acceptance probability linearly over time.
+    LinearDecreasing,
+    /// Higher probability for solutions that are similar to the current one
+    /// (low delta) while gradually decreasing the acceptance probability
+    /// following the natural logarithm. This is the 'standard' acceptance
+    /// function originally defined by Kirkpatrick et al.
+    DeltaLogDecreasing,
+}
+
+impl AcceptanceP {
+    fn probability(self, proportion_left: f64, delta: f64) -> f64 {
+        match self {
+            AcceptanceP::LinearDecreasing => proportion_left,
+            AcceptanceP::DeltaLogDecreasing => {
+                let temperature = proportion_left;
+                (-delta / temperature).exp()
+            }
+        }
     }
 }
 
