@@ -303,6 +303,46 @@ mod test {
         assert_eq!(incr.distance_at_end, Distance(60.0));
     }
 
+    #[test]
+    fn test_score_calculation() {
+        let problem = ProblemInstance {
+            name: String::new(),
+            _num_vehicles: 0,
+            vehicle_capacity: Capacity(200),
+            events: ti_vec![
+                Event {
+                    customer_id: CustomerId(0),
+                    requested_capacity: Capacity(40),
+                    location: loc(0, 10),
+                    kind: EventKind::Delivery,
+                },
+                Event {
+                    customer_id: CustomerId(1),
+                    requested_capacity: Capacity(50),
+                    location: loc(10, 10),
+                    kind: EventKind::Pickup,
+                },
+                Event {
+                    customer_id: CustomerId(2),
+                    requested_capacity: Capacity(160),
+                    location: loc(10, 0),
+                    kind: EventKind::Delivery,
+                },
+            ],
+        };
+
+        let score = calculate_score(&[CustomerId(0), CustomerId(1), CustomerId(2)], &problem);
+        assert_eq!(score, ScoreResult::CapacityViolation);
+        let score = calculate_score(&[CustomerId(2), CustomerId(1), CustomerId(0)], &problem);
+        assert_eq!(
+            score,
+            ScoreResult::NoCapacityViolation(MediumSoft {
+                medium_score: 3,
+                soft_penalty: Distance(40.0)
+            })
+        );
+    }
+
     fn loc(x: u16, y: u16) -> Location {
         Location {
             x: Coordinate(x),
