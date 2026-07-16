@@ -14,7 +14,7 @@ pub(super) struct OptState {
 }
 
 enum ScoreState {
-    AtOnce,
+    Complete,
     Incremental(IncrementalScoreState),
 }
 
@@ -145,7 +145,7 @@ impl OptState {
                     ..Default::default()
                 })
             } else {
-                ScoreState::AtOnce
+                ScoreState::Complete
             },
         };
         let result = state.update_score(Diff::new(0, Some(state.route[0]), None), problem);
@@ -155,7 +155,7 @@ impl OptState {
 
     pub(super) fn update_score(&mut self, diff: Diff, problem: &ProblemInstance) -> ScoreResult {
         match &mut self.score {
-            ScoreState::AtOnce => calculate_score(&self.route, problem),
+            ScoreState::Complete => calculate_score(&self.route, problem),
             ScoreState::Incremental(score) => {
                 score.update_score(&self.route, self.pickup_index, diff, problem)
             }
