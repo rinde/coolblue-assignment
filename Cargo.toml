@@ -10,6 +10,7 @@ typed-index-collections = "3.5.0"
 humantime = "2.4.0"
 rand = "0.10.2"
 rand_xoshiro = "0.8.1"
+rayon = "1.12.0"
 
 [lints.rust]
 macro_use_extern_crate = "warn"

@@ -8,7 +8,7 @@ use rand::RngExt;
 use rand::seq::IndexedRandom;
 
 use crate::domain::{CustomerId, ProblemInstance};
-use crate::optimizer::score::MediumSoft;
+pub(crate) use crate::optimizer::score::MediumSoft;
 use crate::optimizer::score::ScoreResult;
 use crate::optimizer::state::Diff;
 use crate::optimizer::state::OptState;
