@@ -47,7 +47,6 @@ The parser and preprocessing don't have any tests, this would need to be remedie
 ### Prerequisites
 
  * Have Rust/Cargo installed
- * Install [Just](https://just.systems/man/en/introduction.html) (optional): `cargo install just`
  * Download some of the [benchmark instances](https://www.sintef.no/projectweb/top/vrptw/homberger-benchmark/) such that you can point to them using the CLI.
 
  ### Typical run
@@ -58,3 +57,9 @@ cargo run --release -- --move-limit 1000000 --file homberger_1000_customer_insta
  ```
  cargo run -- -h
  ```
+
+## Development
+
+ Install [Just](https://just.systems/man/en/introduction.html) (optional): `cargo install just`
+
+ And run `just lint`, `just test`, etc.
