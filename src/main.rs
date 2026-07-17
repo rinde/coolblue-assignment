@@ -10,7 +10,7 @@ use humantime::format_duration;
 use rand::SeedableRng;
 
 use crate::benchmark::BenchmarkMode;
-use crate::optimizer::{AcceptanceP, OptimizationParams};
+use crate::optimizer::{AcceptanceP, MoveSelection, OptimizationParams};
 
 mod benchmark;
 mod domain;
@@ -38,6 +38,9 @@ struct Cli {
 
     #[arg(long, value_enum, default_value_t = AcceptanceP::DeltaLogDecreasing)]
     acceptance_fun: AcceptanceP,
+
+    #[arg(long, value_enum, default_value_t = MoveSelection::WithTwoOpt)]
+    move_selection: MoveSelection,
 
     /// The number of events n in the input that should be considered as pickup
     /// events. The selected events are in 0..n range. Values outside of the
@@ -84,6 +87,7 @@ fn main() {
             cli.benchmark_runs,
             cli.acceptance_fun,
             !cli.disable_incremental_score,
+            cli.move_selection,
         );
         return;
     }
@@ -97,6 +101,7 @@ fn main() {
             move_limit: cli.move_limit,
             incremental_score_calculation: !cli.disable_incremental_score,
             acceptance_fun: cli.acceptance_fun,
+            move_selection: cli.move_selection,
         },
         &mut rng,
     );

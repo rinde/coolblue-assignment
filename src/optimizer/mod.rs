@@ -5,7 +5,8 @@ use std::mem;
 
 use rand::Rng;
 use rand::RngExt;
-use rand::seq::IndexedRandom;
+use rand_distr::Distribution;
+use rand_distr::weighted::WeightedAliasIndex;
 
 use crate::domain::{CustomerId, ProblemInstance};
 pub(crate) use crate::optimizer::score::MediumSoft;
@@ -13,17 +14,11 @@ use crate::optimizer::score::ScoreResult;
 use crate::optimizer::state::Diff;
 use crate::optimizer::state::OptState;
 
-const MOVES: [MoveType; 4] = [
-    MoveType::AddDelivery,
-    MoveType::SwapDelivery,
-    MoveType::SwapPickup,
-    MoveType::SwapInRoute,
-];
-
 pub(crate) struct OptimizationParams {
     pub(crate) move_limit: usize,
     pub(crate) incremental_score_calculation: bool,
     pub(crate) acceptance_fun: AcceptanceP,
+    pub(crate) move_selection: MoveSelection,
 }
 
 // hard score: all capacity constraints need to be met
@@ -39,14 +34,15 @@ pub(crate) fn optimize(
     let (mut opt_state, initial_score) =
         OptState::init(problem, params.incremental_score_calculation);
 
+    let roulette_wheel = params.move_selection.init();
+
     let mut best_route = opt_state.route.clone();
     let mut best_score = initial_score;
     let mut current_score = initial_score;
 
     // https://en.wikipedia.org/wiki/Simulated_annealing
     for k in 0..params.move_limit {
-        #[expect(clippy::unwrap_used, reason = "MOVES is not empty so this cannot fail")]
-        let move_ = MOVES.choose(rng).unwrap().apply(&mut opt_state, rng);
+        let move_ = roulette_wheel.choose(rng).apply(&mut opt_state, rng);
 
         if let Some(move_) = move_ {
             let diff = move_.diff();
@@ -85,7 +81,9 @@ pub(crate) fn optimize(
     }
 }
 
-#[derive(Copy, Clone, Debug, clap::ValueEnum)]
+#[derive(
+    Copy, Clone, Debug, clap::ValueEnum, strum::Display, strum::VariantArray, strum::IntoStaticStr,
+)]
 pub(crate) enum AcceptanceP {
     /// Decreases acceptance probability linearly over time. This is not real
     /// simulated annealing as it ignores delta.
@@ -109,6 +107,62 @@ impl AcceptanceP {
     }
 }
 
+#[derive(
+    Copy, Clone, Debug, clap::ValueEnum, strum::Display, strum::VariantArray, strum::IntoStaticStr,
+)]
+pub(crate) enum MoveSelection {
+    Simple,
+    WithTwoOpt,
+}
+
+impl MoveSelection {
+    fn init(self) -> RouletteWheelSelector {
+        match self {
+            MoveSelection::Simple => RouletteWheelSelector::new(
+                [
+                    MoveType::AddDelivery,
+                    MoveType::SwapDelivery,
+                    MoveType::SwapPickup,
+                    MoveType::SwapInRoute,
+                ],
+                [1, 1, 1, 1],
+            ),
+            MoveSelection::WithTwoOpt => RouletteWheelSelector::new(
+                [
+                    MoveType::AddDelivery,
+                    MoveType::SwapDelivery,
+                    MoveType::SwapPickup,
+                    MoveType::SwapInRoute,
+                    MoveType::TwoOptSwap,
+                ],
+                [10, 10, 10, 10, 40],
+            ),
+        }
+    }
+}
+
+struct RouletteWheelSelector {
+    moves: Vec<MoveType>,
+    index: WeightedAliasIndex<u8>,
+}
+
+impl RouletteWheelSelector {
+    fn new<const N: usize>(moves: [MoveType; N], weights: [u8; N]) -> Self {
+        Self {
+            moves: moves.to_vec(),
+            #[expect(
+                clippy::unwrap_used,
+                reason = "This is a configuration error and should always be caught in testing"
+            )]
+            index: WeightedAliasIndex::new(weights.to_vec()).unwrap(),
+        }
+    }
+
+    fn choose(&self, rng: &mut impl Rng) -> MoveType {
+        self.moves[self.index.sample(rng)]
+    }
+}
+
 #[derive(Debug)]
 #[expect(dead_code, reason = "The struct is printed in the CLI")]
 pub(crate) struct Solution {
@@ -117,15 +171,17 @@ pub(crate) struct Solution {
     pub(crate) score: MediumSoft,
 }
 
+#[derive(Copy, Clone, Debug)]
 enum MoveType {
     AddDelivery,
     SwapDelivery,
     SwapPickup,
     SwapInRoute,
+    TwoOptSwap,
 }
 
 impl MoveType {
-    fn apply(&self, opt_state: &mut OptState, rng: &mut impl Rng) -> Option<Move> {
+    fn apply(self, opt_state: &mut OptState, rng: &mut impl Rng) -> Option<Move> {
         match self {
             MoveType::AddDelivery => {
                 if opt_state.unrouted_deliveries.is_empty() {
@@ -202,6 +258,24 @@ impl MoveType {
                 opt_state.route.swap(index1, index2);
                 Some(Move::SwapInRoute { index1, index2 })
             }
+            MoveType::TwoOptSwap => {
+                if opt_state.route.len() <= 1 {
+                    return None;
+                }
+                let mut index1 = rng.random_range(0..opt_state.route.len());
+                let mut index2 = rng.random_range(0..(opt_state.route.len() - 1));
+                if index2 >= index1 {
+                    index2 += 1;
+                } else {
+                    mem::swap(&mut index1, &mut index2);
+                }
+                if opt_state.pickup_index >= index1 && opt_state.pickup_index <= index2 {
+                    opt_state.pickup_index = index2 - (opt_state.pickup_index - index1);
+                }
+
+                opt_state.route[index1..=index2].reverse();
+                Some(Move::TwoOptSwap { index1, index2 })
+            }
         }
     }
 }
@@ -225,6 +299,10 @@ enum Move {
         unrouted_index: usize,
     },
     SwapInRoute {
+        index1: usize,
+        index2: usize,
+    },
+    TwoOptSwap {
         index1: usize,
         index2: usize,
     },
@@ -276,6 +354,13 @@ impl Move {
 
                 Diff::new(index1.min(index2), None, None)
             }
+            Move::TwoOptSwap { index1, index2 } => {
+                if opt_state.pickup_index >= index1 && opt_state.pickup_index <= index2 {
+                    opt_state.pickup_index = index2 - (opt_state.pickup_index - index1);
+                }
+                opt_state.route[index1..=index2].reverse();
+                Diff::new(index1, None, None)
+            }
         }
     }
 
@@ -295,6 +380,7 @@ impl Move {
                 ..
             } => Diff::new(route_index, Some(new_pickup), Some(old_pickup)),
             Move::SwapInRoute { index1, index2 } => Diff::new(index1.min(index2), None, None),
+            Move::TwoOptSwap { index1, .. } => Diff::new(index1, None, None),
         }
     }
 }
@@ -633,6 +719,7 @@ mod test {
             move_limit: 5_000,
             incremental_score_calculation: true,
             acceptance_fun: AcceptanceP::DeltaLogDecreasing,
+            move_selection: MoveSelection::WithTwoOpt,
         };
 
         for seed in 0..10 {

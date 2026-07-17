@@ -10,9 +10,10 @@ use std::time::{Duration, Instant};
 use humantime::format_duration;
 use rand::SeedableRng;
 use rayon::prelude::*;
+use strum::VariantArray;
 
 use crate::domain::ProblemInstance;
-use crate::optimizer::{self, AcceptanceP, MediumSoft, OptimizationParams};
+use crate::optimizer::{self, AcceptanceP, MediumSoft, MoveSelection, OptimizationParams};
 
 /// What to vary between the runs of a benchmark.
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -21,6 +22,8 @@ pub(crate) enum BenchmarkMode {
     Acceptance,
     /// Compare incremental vs. non-incremental score calculation.
     Scoring,
+    /// Compare different move configurations.
+    Moves,
 }
 
 #[derive(Clone, Copy)]
@@ -28,6 +31,7 @@ struct Variant {
     label: &'static str,
     acceptance_fun: AcceptanceP,
     incremental_score_calculation: bool,
+    move_selection: MoveSelection,
 }
 
 struct RunResult {
@@ -36,6 +40,7 @@ struct RunResult {
 }
 
 /// Runs the benchmark and prints a table with the results to stdout.
+#[expect(clippy::too_many_arguments, reason = "todo refactor")]
 pub(crate) fn run(
     problem: &ProblemInstance,
     mode: BenchmarkMode,
@@ -44,32 +49,43 @@ pub(crate) fn run(
     runs: usize,
     default_acceptance_fun: AcceptanceP,
     default_incremental_score_calculation: bool,
+    default_move_selection: MoveSelection,
 ) {
     let variants = match mode {
-        BenchmarkMode::Acceptance => vec![
-            Variant {
-                label: "linear-decreasing",
-                acceptance_fun: AcceptanceP::LinearDecreasing,
+        BenchmarkMode::Acceptance => AcceptanceP::VARIANTS
+            .iter()
+            .copied()
+            .map(|acceptance_fun| Variant {
+                label: acceptance_fun.into(),
+                acceptance_fun,
                 incremental_score_calculation: default_incremental_score_calculation,
-            },
-            Variant {
-                label: "delta-log-decreasing",
-                acceptance_fun: AcceptanceP::DeltaLogDecreasing,
-                incremental_score_calculation: default_incremental_score_calculation,
-            },
-        ],
+                move_selection: default_move_selection,
+            })
+            .collect(),
         BenchmarkMode::Scoring => vec![
             Variant {
                 label: "incremental",
                 acceptance_fun: default_acceptance_fun,
                 incremental_score_calculation: true,
+                move_selection: default_move_selection,
             },
             Variant {
                 label: "non-incremental",
                 acceptance_fun: default_acceptance_fun,
                 incremental_score_calculation: false,
+                move_selection: default_move_selection,
             },
         ],
+        BenchmarkMode::Moves => MoveSelection::VARIANTS
+            .iter()
+            .copied()
+            .map(|move_selection| Variant {
+                label: move_selection.into(),
+                acceptance_fun: default_acceptance_fun,
+                incremental_score_calculation: default_incremental_score_calculation,
+                move_selection,
+            })
+            .collect(),
     };
 
     // interleave so that a run index is completed for every variant before
@@ -92,6 +108,7 @@ pub(crate) fn run(
                 move_limit,
                 incremental_score_calculation: variant.incremental_score_calculation,
                 acceptance_fun: variant.acceptance_fun,
+                move_selection: variant.move_selection,
             };
 
             let start = Instant::now();
