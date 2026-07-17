@@ -40,7 +40,7 @@ pub(crate) fn parse(path: &str) -> Result<ProblemInstance, Error> {
         .map(Capacity)
         .map_err(Error::ParseIntError)?;
 
-    for _ in 0..4 {
+    for _ in 0..5 {
         let _ = lines.next().ok_or(Error::UnexpectedFileFormat("6"))?;
     }
 
@@ -55,7 +55,7 @@ pub(crate) fn parse(path: &str) -> Result<ProblemInstance, Error> {
             let customer_id = line_iter
                 .next()
                 .ok_or(Error::UnexpectedFileFormat("7"))?
-                .map(CustomerId)?;
+                .map(|c| CustomerId(c - 1))?;
             // sanity check to ensure ids are unique and sequential
             if customer_id.0 != i as u16 {
                 return Err(Error::UnexpectedFileFormat("8"));

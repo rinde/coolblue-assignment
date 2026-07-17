@@ -86,7 +86,8 @@ pub(crate) fn optimize(
 
 #[derive(Copy, Clone, Debug, clap::ValueEnum)]
 pub(crate) enum AcceptanceP {
-    /// Decreases acceptance probability linearly over time.
+    /// Decreases acceptance probability linearly over time. This is not real
+    /// simulated annealing as it ignores delta.
     LinearDecreasing,
     /// Higher probability for solutions that are similar to the current one
     /// (low delta) while gradually decreasing the acceptance probability

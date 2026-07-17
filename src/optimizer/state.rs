@@ -24,8 +24,10 @@ struct IncrementalScoreState {
     location_at: Vec<Location>,
     distance_at: Vec<Distance>,
     distance_at_end: Distance,
-    // the earliest index where the vehicle has enough capacity to carry the pickup
+    // the earliest index where the vehicle has enough capacity to carry the pickup. Lazily updated
+    // upper bound.
     earliest_pickup_index: usize,
+    capacity_at_pickup_index: Capacity,
 }
 
 impl IncrementalScoreState {
@@ -42,11 +44,13 @@ impl IncrementalScoreState {
         if let Some(event) = diff.remove.map(|c| &problem.events[c])
             && event.kind == EventKind::Delivery
         {
+            self.capacity_at_pickup_index += event.requested_capacity;
             self.free_capacity_at_start += event.requested_capacity;
         }
         if let Some(event) = diff.add.map(|c| &problem.events[c])
             && event.kind == EventKind::Delivery
         {
+            self.capacity_at_pickup_index -= event.requested_capacity;
             self.free_capacity_at_start -= event.requested_capacity;
         }
 
@@ -56,27 +60,45 @@ impl IncrementalScoreState {
             return ScoreResult::CapacityViolation;
         }
 
-        let mut current_capacity = self.free_capacity_at_start;
         let pickup = &problem.events[route[pickup_index]];
         debug_assert_eq!(pickup.kind, EventKind::Pickup);
-        let mut earliest_pickup_index = route.len();
-        for (i, c) in route.iter().copied().enumerate() {
-            if current_capacity >= pickup.requested_capacity {
-                earliest_pickup_index = i;
-                break;
-            }
-            if i != pickup_index {
-                current_capacity += problem.events[c].requested_capacity;
-            }
-        }
 
-        // pickup happens before enough capacity is freed
-        if pickup_index < earliest_pickup_index {
+        // only if there was a change in the route before the pickup index do we need to
+        // traverse the route to check for capacity violations
+        if diff.index <= pickup_index {
+            let mut current_capacity = self.free_capacity_at_start;
+            let mut earliest_pickup_index = route.len();
+            let mut earliest_capacity: Capacity = self.free_capacity_at_start;
+            for (i, c) in route.iter().copied().enumerate() {
+                if current_capacity >= pickup.requested_capacity {
+                    earliest_pickup_index = i;
+                    earliest_capacity = current_capacity;
+                    break;
+                }
+                if i != pickup_index {
+                    current_capacity += problem.events[c].requested_capacity;
+                }
+            }
+
+            // pickup happens before enough capacity is freed
+            if pickup_index < earliest_pickup_index {
+                #[cfg(debug_assertions)]
+                debug_assert_eq!(score, ScoreResult::CapacityViolation);
+                return ScoreResult::CapacityViolation;
+            }
+            self.earliest_pickup_index = earliest_pickup_index;
+
+            for &c in &route[earliest_pickup_index..pickup_index] {
+                earliest_capacity += problem.events[c].requested_capacity;
+            }
+            self.capacity_at_pickup_index = earliest_capacity;
+        } else if self.capacity_at_pickup_index < pickup.requested_capacity {
+            // when the change in the route was after the pickup index, our
+            // bookkeeping will catch capacity violations
             #[cfg(debug_assertions)]
             debug_assert_eq!(score, ScoreResult::CapacityViolation);
             return ScoreResult::CapacityViolation;
         }
-        self.earliest_pickup_index = earliest_pickup_index;
 
         // calculate distances
         let route_len = route.len();
@@ -270,6 +292,7 @@ mod test {
             panic!();
         };
         assert_eq!(incr.free_capacity_at_start, Capacity(160));
+        assert_eq!(incr.capacity_at_pickup_index, Capacity(160));
         assert_eq!(incr.earliest_pickup_index, 0);
         assert_eq!(incr.distance_at, vec![Distance(20.0), Distance(30.0)]);
         assert_eq!(incr.distance_at_end, Distance(40.0));
@@ -295,6 +318,7 @@ mod test {
         assert_eq!(state.unrouted_pickups.len(), 0);
         assert_eq!(state.unrouted_deliveries.len(), 0);
         assert_eq!(incr.free_capacity_at_start, Capacity(0));
+        assert_eq!(incr.capacity_at_pickup_index, Capacity(160));
         assert_eq!(incr.earliest_pickup_index, 1);
         assert_eq!(
             incr.distance_at,
