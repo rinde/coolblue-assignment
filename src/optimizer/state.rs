@@ -15,11 +15,11 @@ pub(super) struct OptState {
 
 enum ScoreState {
     Complete,
-    Incremental(IncrementalScoreState),
+    Partial(PartialScoreState),
 }
 
 #[derive(Default)]
-struct IncrementalScoreState {
+struct PartialScoreState {
     free_capacity_at_start: Capacity,
     location_at: Vec<Location>,
     distance_at: Vec<Distance>,
@@ -30,7 +30,7 @@ struct IncrementalScoreState {
     capacity_at_pickup_index: Capacity,
 }
 
-impl IncrementalScoreState {
+impl PartialScoreState {
     pub(super) fn update_score(
         &mut self,
         route: &[CustomerId],
@@ -126,16 +126,16 @@ impl IncrementalScoreState {
         self.distance_at_end = self.distance_at[route_len - 1]
             + self.location_at[route_len - 1].distance(Location::DEPOT);
 
-        let incremental_score =
+        let partial_score =
             ScoreResult::NoCapacityViolation(MediumSoft::new(route.len(), self.distance_at_end));
         #[cfg(debug_assertions)]
-        debug_assert_eq!(incremental_score, score);
-        incremental_score
+        debug_assert_eq!(partial_score, score);
+        partial_score
     }
 }
 
 impl OptState {
-    pub(super) fn init(problem: &ProblemInstance, incremental: bool) -> (Self, MediumSoft) {
+    pub(super) fn init(problem: &ProblemInstance, partial: bool) -> (Self, MediumSoft) {
         let mut unrouted_pickups = problem
             .events
             .iter()
@@ -159,8 +159,8 @@ impl OptState {
             unrouted_pickups,
             unrouted_deliveries,
             pickup_index: 0,
-            score: if incremental {
-                ScoreState::Incremental(IncrementalScoreState {
+            score: if partial {
+                ScoreState::Partial(PartialScoreState {
                     free_capacity_at_start: problem.vehicle_capacity,
                     ..Default::default()
                 })
@@ -180,7 +180,7 @@ impl OptState {
     pub(super) fn update_score(&mut self, diff: Diff, problem: &ProblemInstance) -> ScoreResult {
         match &mut self.score {
             ScoreState::Complete => calculate_score(&self.route, problem),
-            ScoreState::Incremental(score) => {
+            ScoreState::Partial(score) => {
                 score.update_score(&self.route, self.pickup_index, diff, problem)
             }
         }
@@ -248,7 +248,7 @@ mod test {
     use crate::domain::{Coordinate, Event, ProblemInstance};
 
     #[test]
-    fn test_incremental_opt_state() {
+    fn test_partial_opt_state() {
         let problem = ProblemInstance {
             name: String::new(),
             _num_vehicles: 0,
@@ -290,7 +290,7 @@ mod test {
         assert_eq!(state.unrouted_pickups.len(), 0);
         assert_eq!(state.unrouted_deliveries.len(), 1);
 
-        let ScoreState::Incremental(incr) = &state.score else {
+        let ScoreState::Partial(incr) = &state.score else {
             panic!();
         };
         assert_eq!(incr.free_capacity_at_start, Capacity(160));
@@ -309,7 +309,7 @@ mod test {
             vec![CustomerId(2), CustomerId(1), CustomerId(0)]
         );
         let score = state.update_score(Diff::new(0, Some(CustomerId(2)), None), &problem);
-        let ScoreState::Incremental(incr) = &state.score else {
+        let ScoreState::Partial(incr) = &state.score else {
             panic!();
         };
         assert_ne!(score, ScoreResult::CapacityViolation);

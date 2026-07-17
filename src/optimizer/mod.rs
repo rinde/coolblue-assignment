@@ -16,7 +16,7 @@ use crate::optimizer::state::OptState;
 
 pub(crate) struct OptimizationParams {
     pub(crate) move_limit: usize,
-    pub(crate) incremental_score_calculation: bool,
+    pub(crate) partial_score_calculation: bool,
     pub(crate) acceptance_fun: AcceptanceP,
     pub(crate) move_selection: MoveSelection,
 }
@@ -31,8 +31,7 @@ pub(crate) fn optimize(
     params: &OptimizationParams,
     rng: &mut impl Rng,
 ) -> Solution {
-    let (mut opt_state, initial_score) =
-        OptState::init(problem, params.incremental_score_calculation);
+    let (mut opt_state, initial_score) = OptState::init(problem, params.partial_score_calculation);
 
     let roulette_wheel = params.move_selection.init();
 
@@ -717,7 +716,7 @@ mod test {
         let problem = known_optimum_problem();
         let params = OptimizationParams {
             move_limit: 5_000,
-            incremental_score_calculation: true,
+            partial_score_calculation: true,
             acceptance_fun: AcceptanceP::DeltaLogDecreasing,
             move_selection: MoveSelection::WithTwoOpt,
         };

@@ -34,7 +34,7 @@ struct Cli {
     seed: u64,
 
     #[arg(long, default_value_t = false)]
-    disable_incremental_score: bool,
+    disable_partial_score: bool,
 
     #[arg(long, value_enum, default_value_t = AcceptanceP::DeltaLogDecreasing)]
     acceptance_fun: AcceptanceP,
@@ -86,7 +86,7 @@ fn main() {
             cli.seed,
             cli.benchmark_runs,
             cli.acceptance_fun,
-            !cli.disable_incremental_score,
+            !cli.disable_partial_score,
             cli.move_selection,
         );
         return;
@@ -99,7 +99,7 @@ fn main() {
         &problem,
         &OptimizationParams {
             move_limit: cli.move_limit,
-            incremental_score_calculation: !cli.disable_incremental_score,
+            partial_score_calculation: !cli.disable_partial_score,
             acceptance_fun: cli.acceptance_fun,
             move_selection: cli.move_selection,
         },

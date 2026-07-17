@@ -40,6 +40,7 @@ pub(crate) fn parse(path: &str) -> Result<ProblemInstance, Error> {
         .map(Capacity)
         .map_err(Error::ParseIntError)?;
 
+    // skip first event as it is a hub that we will ignore
     for _ in 0..5 {
         let _ = lines.next().ok_or(Error::UnexpectedFileFormat("6"))?;
     }

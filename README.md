@@ -13,19 +13,19 @@ To calculate the energy difference, the 'delta' between two solutions the score 
 
 Features:
 * Parses the files from the Homberger Benchmarks, the proportion of events that is a pickup is configurable in the CLI.
-* Different scoring strategies, configurable via `--disable-incremental-score`, the implementation is in `optimizer/state.rs`: `ScoreState`. The incremental score calculator is significantly faster (I've observed differences of ~2x) than the complete score calculator at the cost of increased complexity. There is more potential for optimization though.
+* Different scoring strategies, configurable via `--disable-partial-score`, the implementation is in `optimizer/state.rs`: `ScoreState`. The partial score calculator is significantly faster (I've observed differences of ~2x) than the complete score calculator at the cost of increased complexity. This speedup is expected because the amount of calculations is roughly halved. There is more potential for optimization though, such as changing how distances are tracked, how they are calculated (e.g. Euclidean distance using SIMD), and distance caching.
 * Different acceptance functions, configurable via `--acceptance-fun`, the implementation is in `optimizer/mod.rs`: `AcceptanceP`.
-* Four different moves `AddDelivery, SwapDelivery, SwapPickup, SwapInRoute` as defined in `optimizer/mod.rs`.
+* Five different moves `AddDelivery, SwapDelivery, SwapPickup, SwapInRoute`, `TwoOptSwap` as defined in `optimizer/mod.rs`.
 * Benchmarking, allow running a benchmark comparing different implementations. See `--benchmark` for more information.
 
-I've modeled the problem such that there is always a feasible solution and any infeasible solution is immediately rejected. This is because in my experience the infeasible search space can be very large and it is easy for an optimizer to get stuck in it. The way I guarantee the solution to be feasible is by starting with a route containing a single pickup. The only way that the pickup can change is by `SwapInRoute` which changes the index, or by `SwapPickup` which exchanges the routed pickup for an unrouted one.
+I've modeled the problem such that there is always a feasible solution and any infeasible solution is immediately rejected. This is because in my experience the infeasible search space can be very large and it is easy for an optimizer to get stuck in it. The way I guarantee the solution to be feasible is by starting with a route containing a single pickup. The only way that the pickup can change is by `SwapInRoute`/`TwoOptSwap` which changes the index, or by `SwapPickup` which exchanges the routed pickup for an unrouted one.
 
 ## Testing strategy
 
 Testing strategy
 Due to the limited time the testing strategy is not as complete as I would otherwise prefer it to be. 
 
-The incremental score calculation has a limited number of tests, however, to increase confidence in the implementation the code contains a number of `debug_assert*` statements that test certain invariants. Notably, each time the incremental score calculator runs, it calls the complete score calculator to ensure consistency. These debug asserts normally only run in debug mode (for performance reasons), however, it is possible to test them on big files by running:
+The partial score calculation has a limited number of tests, however, to increase confidence in the implementation the code contains a number of `debug_assert*` statements that test certain invariants. Notably, each time the partial score calculator runs, it calls the complete score calculator to ensure consistency. These debug asserts normally only run in debug mode (for performance reasons), however, it is possible to test them on big files by running:
 ```
 RUSTFLAGS="-C debug-assertions" cargo run --release -- --move-limit 10000000 --file path/to/problem
 ```

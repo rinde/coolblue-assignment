@@ -20,7 +20,7 @@ use crate::optimizer::{self, AcceptanceP, MediumSoft, MoveSelection, Optimizatio
 pub(crate) enum BenchmarkMode {
     /// Compare all available acceptance functions against each other.
     Acceptance,
-    /// Compare incremental vs. non-incremental score calculation.
+    /// Compare partial vs. complete score calculation.
     Scoring,
     /// Compare different move configurations.
     Moves,
@@ -30,7 +30,7 @@ pub(crate) enum BenchmarkMode {
 struct Variant {
     label: &'static str,
     acceptance_fun: AcceptanceP,
-    incremental_score_calculation: bool,
+    partial_score_calculation: bool,
     move_selection: MoveSelection,
 }
 
@@ -48,7 +48,7 @@ pub(crate) fn run(
     seed: u64,
     runs: usize,
     default_acceptance_fun: AcceptanceP,
-    default_incremental_score_calculation: bool,
+    default_partial_score_calculation: bool,
     default_move_selection: MoveSelection,
 ) {
     let variants = match mode {
@@ -58,21 +58,21 @@ pub(crate) fn run(
             .map(|acceptance_fun| Variant {
                 label: acceptance_fun.into(),
                 acceptance_fun,
-                incremental_score_calculation: default_incremental_score_calculation,
+                partial_score_calculation: default_partial_score_calculation,
                 move_selection: default_move_selection,
             })
             .collect(),
         BenchmarkMode::Scoring => vec![
             Variant {
-                label: "incremental",
+                label: "partial",
                 acceptance_fun: default_acceptance_fun,
-                incremental_score_calculation: true,
+                partial_score_calculation: true,
                 move_selection: default_move_selection,
             },
             Variant {
-                label: "non-incremental",
+                label: "complete",
                 acceptance_fun: default_acceptance_fun,
-                incremental_score_calculation: false,
+                partial_score_calculation: false,
                 move_selection: default_move_selection,
             },
         ],
@@ -82,7 +82,7 @@ pub(crate) fn run(
             .map(|move_selection| Variant {
                 label: move_selection.into(),
                 acceptance_fun: default_acceptance_fun,
-                incremental_score_calculation: default_incremental_score_calculation,
+                partial_score_calculation: default_partial_score_calculation,
                 move_selection,
             })
             .collect(),
@@ -106,7 +106,7 @@ pub(crate) fn run(
             );
             let params = OptimizationParams {
                 move_limit,
-                incremental_score_calculation: variant.incremental_score_calculation,
+                partial_score_calculation: variant.partial_score_calculation,
                 acceptance_fun: variant.acceptance_fun,
                 move_selection: variant.move_selection,
             };
