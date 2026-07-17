@@ -14,9 +14,9 @@ pub(crate) struct MediumSoft {
     pub(crate) soft_penalty: Distance,
 }
 impl MediumSoft {
-    pub(crate) const ZERO: Self = Self {
+    pub(crate) const WORST: Self = Self {
         medium_score: 0,
-        soft_penalty: Distance(0.0),
+        soft_penalty: Distance(f64::MAX),
     };
 
     pub(crate) const fn new(medium_score: usize, soft_penalty: Distance) -> Self {
@@ -29,7 +29,7 @@ impl MediumSoft {
     /// Calculates the 'delta' between two scores.
     ///
     /// If the medium score differs, it will return the absolute difference
-    /// between the scores `> 1.0`. If the medium score is equal it will return
+    /// between the scores `>= 1.0`. If the medium score is equal it will return
     /// a percentage of difference of the soft penalty in `0.0-1.0` range.
     pub(crate) fn delta(self, other: Self) -> f64 {
         if self.medium_score != other.medium_score {

@@ -36,11 +36,12 @@ pub(crate) fn optimize(
     params: &OptimizationParams,
     rng: &mut impl Rng,
 ) -> Solution {
-    let mut opt_state = OptState::init(problem, params.incremental_score_calculation);
+    let (mut opt_state, initial_score) =
+        OptState::init(problem, params.incremental_score_calculation);
 
     let mut best_route = opt_state.route.clone();
-    let mut best_score = MediumSoft::ZERO;
-    let mut current_score = MediumSoft::ZERO;
+    let mut best_score = initial_score;
+    let mut current_score = initial_score;
 
     // https://en.wikipedia.org/wiki/Simulated_annealing
     for k in 0..params.move_limit {
@@ -376,7 +377,7 @@ mod test {
         // branches of apply()/undo().
         for seed in 0..30 {
             let problem = test_problem();
-            let mut opt_state = OptState::init(&problem, false);
+            let (mut opt_state, _) = OptState::init(&problem, false);
             let mut rng = rng(seed);
 
             let before_route = opt_state.route.clone();
@@ -417,7 +418,7 @@ mod test {
     #[test]
     fn swap_delivery_apply_diff_undo() {
         let problem = test_problem();
-        let mut opt_state = OptState::init(&problem, false);
+        let (mut opt_state, _) = OptState::init(&problem, false);
         // force a deterministic scenario: a single candidate on each side
         // means the random indices are forced regardless of the rng's
         // output (random_range(0..1) is always 0).
@@ -471,7 +472,7 @@ mod test {
     #[test]
     fn swap_pickup_apply_diff_undo() {
         let problem = test_problem();
-        let mut opt_state = OptState::init(&problem, false);
+        let (mut opt_state, _) = OptState::init(&problem, false);
         // OptState::init already leaves a single unrouted pickup, so the
         // random index is forced regardless of the rng's output.
         assert_eq!(opt_state.unrouted_pickups, vec![CustomerId(0)]);
@@ -527,7 +528,7 @@ mod test {
         // does/doesn't touch pickup_index.
         for seed in 0..30 {
             let problem = test_problem();
-            let mut opt_state = OptState::init(&problem, false);
+            let (mut opt_state, _) = OptState::init(&problem, false);
             opt_state.route = vec![CustomerId(1), CustomerId(2), CustomerId(3), CustomerId(4)];
             opt_state.pickup_index = 0;
 

@@ -135,7 +135,8 @@ fn print_table(variants: &[Variant], results: &[(usize, RunResult)]) {
             .map(|r| r.score.soft_penalty.0)
             .sum::<f64>()
             / n as f64;
-        let best = variant_results.iter().fold(MediumSoft::ZERO, |best, r| {
+
+        let best = variant_results.iter().fold(MediumSoft::WORST, |best, r| {
             if r.score > best { r.score } else { best }
         });
         let avg_time = variant_results.iter().map(|r| r.duration).sum::<Duration>() / n as u32;

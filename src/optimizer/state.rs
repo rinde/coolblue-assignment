@@ -135,12 +135,11 @@ impl IncrementalScoreState {
 }
 
 impl OptState {
-    pub(super) fn init(problem: &ProblemInstance, incremental: bool) -> Self {
+    pub(super) fn init(problem: &ProblemInstance, incremental: bool) -> (Self, MediumSoft) {
         let mut unrouted_pickups = problem
             .events
             .iter()
             .filter(|e| e.kind == EventKind::Pickup)
-            // .sorted_by_key(|e| e.requested_capacity)
             .map(|e| e.customer_id)
             .collect::<Vec<_>>();
 
@@ -148,7 +147,6 @@ impl OptState {
             .events
             .iter()
             .filter(|e| e.kind == EventKind::Delivery)
-            // .sorted_by_key(|e| e.requested_capacity)
             .map(|e| e.customer_id)
             .collect();
 
@@ -170,9 +168,13 @@ impl OptState {
                 ScoreState::Complete
             },
         };
-        let result = state.update_score(Diff::new(0, Some(state.route[0]), None), problem);
-        debug_assert_ne!(result, ScoreResult::CapacityViolation);
-        state
+        let ScoreResult::NoCapacityViolation(med_soft) =
+            state.update_score(Diff::new(0, Some(state.route[0]), None), problem)
+        else {
+            panic!("initial solution has a capacity violation, check the input file")
+        };
+
+        (state, med_soft)
     }
 
     pub(super) fn update_score(&mut self, diff: Diff, problem: &ProblemInstance) -> ScoreResult {
@@ -273,7 +275,7 @@ mod test {
             ],
         };
 
-        let mut state = OptState::init(&problem, true);
+        let (mut state, _) = OptState::init(&problem, true);
 
         // add a delivery to the route
         state.route.push(state.unrouted_deliveries.remove(0));

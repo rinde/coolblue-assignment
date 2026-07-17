@@ -7,6 +7,8 @@ Simulated annealing is a proven local search metaheuristic that allows to conver
 
 The way that simulated annealing converges to the optimum is through gradually lowering the temperature (in analogy to annealing in metallurgy). The higher the temperature, the higher the probability is for accepting worse solutions (the exploration phase), the lower the temperature, the lower the probability for accepting worse solutions (the exploitation phase). Simulated annealing converges from a high to a low temperature, usually, the last few steps are equivalent to hill climbing.
 
+To calculate the energy difference, the 'delta' between two solutions the score is normalized to a single number. The score consists of route length (medium score, to be maximized) and distance traveled (soft penalty, to be minimized). Since route length is strictly better than any distance improvement, the delta function heavily emphasizes changes in route length. A change in medium score is in the range `[1.0..∞)`, a change in soft score is in the range `[0.0,1.0]`. See `MediumSoft` in `optimizer/score.rs` for the details.
+
 ## Implementation
 
 Features:
