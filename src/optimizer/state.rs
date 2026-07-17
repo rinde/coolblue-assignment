@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::{
     domain::{Capacity, CustomerId, Distance, EventKind, Location, ProblemInstance},
     optimizer::score::{MediumSoft, ScoreResult},
@@ -11,6 +13,81 @@ pub(super) struct OptState {
     pub(super) pickup_index: usize,
 
     score: ScoreState,
+}
+
+impl OptState {
+    pub(super) fn init(problem: &ProblemInstance, partial: bool) -> (Self, MediumSoft) {
+        let mut unrouted_pickups = problem
+            .events
+            .iter()
+            .filter(|e| e.kind == EventKind::Pickup)
+            .map(|e| e.customer_id)
+            .collect::<Vec<_>>();
+
+        let mut unrouted_deliveries = problem
+            .events
+            .iter()
+            .filter(|e| e.kind == EventKind::Delivery)
+            .map(|e| (e.customer_id, e.requested_capacity))
+            .sorted_by_key(|&(_, cap)| cap)
+            .collect::<Vec<_>>();
+
+        // simple pre-processing to discard all deliveries that can never be part of
+        // the longest route
+        let mut capacity = problem.vehicle_capacity;
+        let mut max_index = unrouted_deliveries.len();
+        for (i, &(_, cap)) in unrouted_deliveries.iter().enumerate() {
+            capacity -= cap;
+            if capacity < Capacity::ZERO {
+                // the maximum size that could fit in the vehicle by replacing one of the
+                // deliveries with size 'cap'
+                let threshold = capacity + cap + cap;
+                max_index = i + unrouted_deliveries[i..]
+                    .iter()
+                    .find_position(|&&(_, x)| x > threshold)
+                    .map(|(i, _)| i)
+                    .unwrap_or(unrouted_deliveries.len() - i);
+                break;
+            }
+        }
+        unrouted_deliveries.truncate(max_index);
+        let unrouted_deliveries = unrouted_deliveries.into_iter().map(|(c, _)| c).collect();
+
+        let mut state = Self {
+            route: vec![
+                unrouted_pickups
+                    .pop()
+                    .unwrap_or_else(|| panic!("at least one pickup is required")),
+            ],
+            unrouted_pickups,
+            unrouted_deliveries,
+            pickup_index: 0,
+            score: if partial {
+                ScoreState::Partial(PartialScoreState {
+                    free_capacity_at_start: problem.vehicle_capacity,
+                    ..Default::default()
+                })
+            } else {
+                ScoreState::Complete
+            },
+        };
+        let ScoreResult::NoCapacityViolation(med_soft) =
+            state.update_score(Diff::new(0, Some(state.route[0]), None), problem)
+        else {
+            panic!("initial solution has a capacity violation, check the input file")
+        };
+
+        (state, med_soft)
+    }
+
+    pub(super) fn update_score(&mut self, diff: Diff, problem: &ProblemInstance) -> ScoreResult {
+        match &mut self.score {
+            ScoreState::Complete => calculate_score(&self.route, problem),
+            ScoreState::Partial(score) => {
+                score.update_score(&self.route, self.pickup_index, diff, problem)
+            }
+        }
+    }
 }
 
 enum ScoreState {
@@ -131,59 +208,6 @@ impl PartialScoreState {
         #[cfg(debug_assertions)]
         debug_assert_eq!(partial_score, score);
         partial_score
-    }
-}
-
-impl OptState {
-    pub(super) fn init(problem: &ProblemInstance, partial: bool) -> (Self, MediumSoft) {
-        let mut unrouted_pickups = problem
-            .events
-            .iter()
-            .filter(|e| e.kind == EventKind::Pickup)
-            .map(|e| e.customer_id)
-            .collect::<Vec<_>>();
-
-        let unrouted_deliveries = problem
-            .events
-            .iter()
-            .filter(|e| e.kind == EventKind::Delivery)
-            .map(|e| e.customer_id)
-            .collect();
-
-        let mut state = Self {
-            route: vec![
-                unrouted_pickups
-                    .pop()
-                    .unwrap_or_else(|| panic!("at least one pickup is required")),
-            ],
-            unrouted_pickups,
-            unrouted_deliveries,
-            pickup_index: 0,
-            score: if partial {
-                ScoreState::Partial(PartialScoreState {
-                    free_capacity_at_start: problem.vehicle_capacity,
-                    ..Default::default()
-                })
-            } else {
-                ScoreState::Complete
-            },
-        };
-        let ScoreResult::NoCapacityViolation(med_soft) =
-            state.update_score(Diff::new(0, Some(state.route[0]), None), problem)
-        else {
-            panic!("initial solution has a capacity violation, check the input file")
-        };
-
-        (state, med_soft)
-    }
-
-    pub(super) fn update_score(&mut self, diff: Diff, problem: &ProblemInstance) -> ScoreResult {
-        match &mut self.score {
-            ScoreState::Complete => calculate_score(&self.route, problem),
-            ScoreState::Partial(score) => {
-                score.update_score(&self.route, self.pickup_index, diff, problem)
-            }
-        }
     }
 }
 
