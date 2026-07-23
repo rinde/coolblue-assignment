@@ -6,6 +6,7 @@ use crate::{
 };
 
 /// Efficiently tracks the optimization state.
+#[derive(Debug)]
 pub(super) struct OptState {
     pub(super) route: Vec<CustomerId>,
     pub(super) unrouted_pickups: Vec<CustomerId>,
@@ -16,7 +17,17 @@ pub(super) struct OptState {
 }
 
 impl OptState {
-    pub(super) fn init(problem: &ProblemInstance, partial: bool) -> (Self, MediumSoft) {
+    #[expect(clippy::too_many_lines, reason = "TODO refactor")]
+    pub(super) fn init(
+        problem: &ProblemInstance,
+        partial: bool,
+        greedy_insertion: bool,
+    ) -> (Self, MediumSoft) {
+        assert!(
+            !(greedy_insertion && partial),
+            "Partial score computation cannot be combined with greedy insertion"
+        );
+
         let mut unrouted_pickups = problem
             .events
             .iter()
@@ -36,32 +47,112 @@ impl OptState {
         // the longest route
         let mut capacity = problem.vehicle_capacity;
         let mut max_index = unrouted_deliveries.len();
+        let mut initial_index = unrouted_deliveries.len();
         for (i, &(_, cap)) in unrouted_deliveries.iter().enumerate() {
             capacity -= cap;
             if capacity < Capacity::ZERO {
                 // the maximum size that could fit in the vehicle by replacing one of the
                 // deliveries with size 'cap'
                 let threshold = capacity + cap + cap;
+                initial_index = i - 1;
                 max_index = i + unrouted_deliveries[i..]
                     .iter()
                     .find_position(|&&(_, x)| x > threshold)
-                    .map(|(i, _)| i)
-                    .unwrap_or(unrouted_deliveries.len() - i);
+                    .map_or(unrouted_deliveries.len() - i, |(i, _)| i);
                 break;
             }
         }
         unrouted_deliveries.truncate(max_index);
-        let unrouted_deliveries = unrouted_deliveries.into_iter().map(|(c, _)| c).collect();
+        let mut unrouted_deliveries = unrouted_deliveries
+            .into_iter()
+            .map(|(c, _)| c)
+            .collect::<Vec<_>>();
 
-        let mut state = Self {
-            route: vec![
+        let mut route = vec![];
+        let mut pickup_index = 0;
+        if greedy_insertion {
+            // greedy insertion
+            let mut cap = problem.vehicle_capacity;
+            let mut loc = Location::DEPOT;
+            let temp = unrouted_deliveries.split_off(initial_index + 1);
+
+            while cap > Capacity::ZERO {
+                let Some((index, &closest)) = unrouted_deliveries
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, c)| problem.events[**c].location.distance(loc))
+                else {
+                    break;
+                };
+                let ev = &problem.events[closest];
+                if cap >= ev.requested_capacity {
+                    let _ = unrouted_deliveries.remove(index);
+                    cap -= ev.requested_capacity;
+                    loc = ev.location;
+                    route.push(closest);
+                } else {
+                    break;
+                }
+            }
+
+            let mut capacity_at = vec![];
+            for &c in &route {
+                capacity_at.push(cap);
+                cap += problem.events[c].requested_capacity;
+            }
+
+            let mut best_dist = Distance(f64::MAX);
+            let mut best = None;
+            for (i, &p) in unrouted_pickups.iter().enumerate() {
+                let ev = &problem.events[p];
+
+                for j in 0..route.len() {
+                    if capacity_at[j] < ev.requested_capacity {
+                        continue;
+                    }
+                    // TODO calc cap along route
+                    let loc_before = if j == 0 {
+                        Location::DEPOT
+                    } else {
+                        problem.events[route[j]].location
+                    };
+                    let loc_after = if j == route.len() - 1 {
+                        Location::DEPOT
+                    } else {
+                        problem.events[route[j + 1]].location
+                    };
+
+                    let diff = loc_before.distance(ev.location) + loc_after.distance(ev.location)
+                        - loc_before.distance(loc_after);
+
+                    if diff < best_dist {
+                        best_dist = diff;
+                        best = Some((p, i, j));
+                    }
+                }
+            }
+            let Some((c, customer_index, insertion_index)) = best else {
+                panic!();
+            };
+            let _ = unrouted_pickups.remove(customer_index);
+            pickup_index = insertion_index;
+            route.insert(insertion_index, c);
+
+            // assert!(unrouted_deliveries.is_empty());
+            unrouted_deliveries.extend(temp);
+        } else {
+            route.push(
                 unrouted_pickups
                     .pop()
                     .unwrap_or_else(|| panic!("at least one pickup is required")),
-            ],
+            );
+        }
+
+        let mut state = Self {
+            route,
             unrouted_pickups,
             unrouted_deliveries,
-            pickup_index: 0,
+            pickup_index,
             score: if partial {
                 ScoreState::Partial(PartialScoreState {
                     free_capacity_at_start: problem.vehicle_capacity,
@@ -76,7 +167,6 @@ impl OptState {
         else {
             panic!("initial solution has a capacity violation, check the input file")
         };
-
         (state, med_soft)
     }
 
@@ -90,12 +180,13 @@ impl OptState {
     }
 }
 
+#[derive(Debug)]
 enum ScoreState {
     Complete,
     Partial(PartialScoreState),
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 struct PartialScoreState {
     free_capacity_at_start: Capacity,
     location_at: Vec<Location>,
@@ -299,7 +390,7 @@ mod test {
             ],
         };
 
-        let (mut state, _) = OptState::init(&problem, true);
+        let (mut state, _) = OptState::init(&problem, true, false);
 
         // add a delivery to the route
         state.route.push(state.unrouted_deliveries.remove(0));

@@ -24,6 +24,8 @@ pub(crate) enum BenchmarkMode {
     Scoring,
     /// Compare different move configurations.
     Moves,
+    /// Compare with and without greedy insertion.
+    GreedyInsertion,
 }
 
 #[derive(Clone, Copy)]
@@ -32,6 +34,7 @@ struct Variant {
     acceptance_fun: AcceptanceP,
     partial_score_calculation: bool,
     move_selection: MoveSelection,
+    greedy_insertion: bool,
 }
 
 struct RunResult {
@@ -50,6 +53,7 @@ pub(crate) fn run(
     default_acceptance_fun: AcceptanceP,
     default_partial_score_calculation: bool,
     default_move_selection: MoveSelection,
+    default_greedy_insertion: bool,
 ) {
     let variants = match mode {
         BenchmarkMode::Acceptance => AcceptanceP::VARIANTS
@@ -60,6 +64,7 @@ pub(crate) fn run(
                 acceptance_fun,
                 partial_score_calculation: default_partial_score_calculation,
                 move_selection: default_move_selection,
+                greedy_insertion: default_greedy_insertion,
             })
             .collect(),
         BenchmarkMode::Scoring => vec![
@@ -68,12 +73,14 @@ pub(crate) fn run(
                 acceptance_fun: default_acceptance_fun,
                 partial_score_calculation: true,
                 move_selection: default_move_selection,
+                greedy_insertion: default_greedy_insertion,
             },
             Variant {
                 label: "complete",
                 acceptance_fun: default_acceptance_fun,
                 partial_score_calculation: false,
                 move_selection: default_move_selection,
+                greedy_insertion: default_greedy_insertion,
             },
         ],
         BenchmarkMode::Moves => MoveSelection::VARIANTS
@@ -84,8 +91,25 @@ pub(crate) fn run(
                 acceptance_fun: default_acceptance_fun,
                 partial_score_calculation: default_partial_score_calculation,
                 move_selection,
+                greedy_insertion: default_greedy_insertion,
             })
             .collect(),
+        BenchmarkMode::GreedyInsertion => vec![
+            Variant {
+                label: "greedy insertion",
+                acceptance_fun: default_acceptance_fun,
+                partial_score_calculation: default_partial_score_calculation,
+                move_selection: default_move_selection,
+                greedy_insertion: true,
+            },
+            Variant {
+                label: "default insertion",
+                acceptance_fun: default_acceptance_fun,
+                partial_score_calculation: default_partial_score_calculation,
+                move_selection: default_move_selection,
+                greedy_insertion: false,
+            },
+        ],
     };
 
     // interleave so that a run index is completed for every variant before
@@ -109,6 +133,7 @@ pub(crate) fn run(
                 partial_score_calculation: variant.partial_score_calculation,
                 acceptance_fun: variant.acceptance_fun,
                 move_selection: variant.move_selection,
+                enable_greedy_insertion: variant.greedy_insertion,
             };
 
             let start = Instant::now();

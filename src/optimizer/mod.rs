@@ -19,6 +19,7 @@ pub(crate) struct OptimizationParams {
     pub(crate) partial_score_calculation: bool,
     pub(crate) acceptance_fun: AcceptanceP,
     pub(crate) move_selection: MoveSelection,
+    pub(crate) enable_greedy_insertion: bool,
 }
 
 // hard score: all capacity constraints need to be met
@@ -31,7 +32,11 @@ pub(crate) fn optimize(
     params: &OptimizationParams,
     rng: &mut impl Rng,
 ) -> Solution {
-    let (mut opt_state, initial_score) = OptState::init(problem, params.partial_score_calculation);
+    let (mut opt_state, initial_score) = OptState::init(
+        problem,
+        params.partial_score_calculation,
+        params.enable_greedy_insertion,
+    );
 
     let roulette_wheel = params.move_selection.init();
 
@@ -462,7 +467,7 @@ mod test {
         // branches of apply()/undo().
         for seed in 0..30 {
             let problem = test_problem();
-            let (mut opt_state, _) = OptState::init(&problem, false);
+            let (mut opt_state, _) = OptState::init(&problem, false, false);
             let mut rng = rng(seed);
 
             let before_route = opt_state.route.clone();
@@ -503,7 +508,7 @@ mod test {
     #[test]
     fn swap_delivery_apply_diff_undo() {
         let problem = test_problem();
-        let (mut opt_state, _) = OptState::init(&problem, false);
+        let (mut opt_state, _) = OptState::init(&problem, false, false);
         // force a deterministic scenario: a single candidate on each side
         // means the random indices are forced regardless of the rng's
         // output (random_range(0..1) is always 0).
@@ -557,7 +562,7 @@ mod test {
     #[test]
     fn swap_pickup_apply_diff_undo() {
         let problem = test_problem();
-        let (mut opt_state, _) = OptState::init(&problem, false);
+        let (mut opt_state, _) = OptState::init(&problem, false, false);
         // OptState::init already leaves a single unrouted pickup, so the
         // random index is forced regardless of the rng's output.
         assert_eq!(opt_state.unrouted_pickups, vec![CustomerId(0)]);
@@ -613,7 +618,7 @@ mod test {
         // does/doesn't touch pickup_index.
         for seed in 0..30 {
             let problem = test_problem();
-            let (mut opt_state, _) = OptState::init(&problem, false);
+            let (mut opt_state, _) = OptState::init(&problem, false, false);
             opt_state.route = vec![CustomerId(1), CustomerId(2), CustomerId(3), CustomerId(4)];
             opt_state.pickup_index = 0;
 
@@ -719,6 +724,7 @@ mod test {
             partial_score_calculation: true,
             acceptance_fun: AcceptanceP::DeltaLogDecreasing,
             move_selection: MoveSelection::WithTwoOpt,
+            enable_greedy_insertion: false,
         };
 
         for seed in 0..10 {

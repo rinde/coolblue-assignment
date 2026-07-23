@@ -36,6 +36,9 @@ struct Cli {
     #[arg(long, default_value_t = false)]
     disable_partial_score: bool,
 
+    #[arg(long, default_value_t = false)]
+    greedy_insertion: bool,
+
     #[arg(long, value_enum, default_value_t = AcceptanceP::DeltaLogDecreasing)]
     acceptance_fun: AcceptanceP,
 
@@ -88,6 +91,7 @@ fn main() {
             cli.acceptance_fun,
             !cli.disable_partial_score,
             cli.move_selection,
+            cli.greedy_insertion,
         );
         return;
     }
@@ -102,6 +106,7 @@ fn main() {
             partial_score_calculation: !cli.disable_partial_score,
             acceptance_fun: cli.acceptance_fun,
             move_selection: cli.move_selection,
+            enable_greedy_insertion: cli.greedy_insertion,
         },
         &mut rng,
     );

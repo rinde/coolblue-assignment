@@ -33,8 +33,20 @@ impl From<CustomerId> for usize {
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct Coordinate(pub u16);
 
-#[derive(Debug, Clone, Copy, Default, Add, AddAssign, PartialOrd, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, Add, AddAssign, Sub, PartialOrd, PartialEq)]
 pub(crate) struct Distance(pub f64);
+
+#[expect(
+    clippy::derive_ord_xor_partial_ord,
+    reason = "Ord and PartialOrd are in agreement"
+)]
+impl Ord for Distance {
+    #[expect(clippy::unwrap_used, reason = "We can ignore NaN")]
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+impl Eq for Distance {}
 
 #[derive(Debug, Clone)]
 pub(crate) struct ProblemInstance {
