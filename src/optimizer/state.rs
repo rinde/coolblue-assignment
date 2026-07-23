@@ -45,8 +45,7 @@ impl OptState {
                 max_index = i + unrouted_deliveries[i..]
                     .iter()
                     .find_position(|&&(_, x)| x > threshold)
-                    .map(|(i, _)| i)
-                    .unwrap_or(unrouted_deliveries.len() - i);
+                    .map_or(unrouted_deliveries.len() - i, |(i, _)| i);
                 break;
             }
         }
